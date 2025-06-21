@@ -5,7 +5,7 @@ conn = sqlite3.connect("chat_history.db")
 c = conn.cursor()
 
 # Fetch all past chats
-c.execute("SELECT id, query, answer FROM chat ORDER BY id DESC")
+c.execute("SELECT id, query, answer FROM chat ORDER BY id DESC limit 2")
 rows = c.fetchall()
 
 # Print the history
