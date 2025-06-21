@@ -1,23 +1,14 @@
-# chatbot_web_search.py
-
 import os
 import logging
 import requests
 import streamlit as st
+import sqlite3
 from dotenv import load_dotenv
 from typing import TypedDict, List
 from langgraph.graph import StateGraph, END
-#from web import run as web_run
-
-from duckduckgo_search import DDGS
-
-
-import requests
-
-SERPAPI_KEY = os.getenv("SERPAPI_KEY")
-
 
 load_dotenv()
+SERPAPI_KEY = os.getenv("SERPAPI_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_URL = (
     f"https://generativelanguage.googleapis.com/v1beta/"
@@ -27,17 +18,23 @@ GEMINI_URL = (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Chatbot")
 
+# DB setup
+conn = sqlite3.connect("chat_history.db")
+c = conn.cursor()
+c.execute("""
+    CREATE TABLE IF NOT EXISTS chat (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        query TEXT,
+        answer TEXT
+    )
+""")
+conn.commit()
+
 class ChatState(TypedDict):
     query: str
     web_content: str
     final_answer: str
     steps: List[str]
-
-def perform_duckduckgo_search(query: str) -> str:
-    with DDGS() as ddgs:
-        results = ddgs.text(query, region='wt-wt', safesearch='Moderate', max_results=5)
-        snippets = [r["body"] for r in results if "body" in r]
-        return "\n\n".join(snippets)
 
 def perform_serpapi_search(query: str) -> str:
     url = "https://serpapi.com/search"
@@ -52,6 +49,25 @@ def perform_serpapi_search(query: str) -> str:
     data = res.json()
     snippets = [r.get("snippet") for r in data.get("organic_results", []) if r.get("snippet")]
     return "\n\n".join(snippets)
+
+def sanitize_query(state: ChatState) -> ChatState:
+    logger.info("🧹 Sanitizing query")
+    state["query"] = state["query"].strip().lower()
+    state["steps"].append("Sanitized query")
+    return state
+
+def search_web(state: ChatState) -> ChatState:
+    logger.info("🌐 Searching web via SerpAPI")
+    snippets = perform_serpapi_search(state["query"])
+    state["web_content"] = snippets
+    state["steps"].append("Fetched web content")
+    return state
+
+def refine_answer(state: ChatState) -> ChatState:
+    logger.info("🪄 Refining answer")
+    state["final_answer"] = state["final_answer"] + "\n\n(Refined by Gemini)"
+    state["steps"].append("Refined summary")
+    return state
 
 
 def summarize_web(state: ChatState) -> ChatState:
@@ -71,55 +87,83 @@ def summarize_web(state: ChatState) -> ChatState:
         state["final_answer"] = "Sorry, no answer available."
     return state
 
+
 workflow = StateGraph(ChatState)
+workflow.add_node("sanitize_query", sanitize_query)
+workflow.add_node("search_web", search_web)
 workflow.add_node("summarize_web", summarize_web)
-workflow.set_entry_point("summarize_web")
-workflow.add_edge("summarize_web", END)
+workflow.add_node("refine_answer", refine_answer)
+
+workflow.set_entry_point("sanitize_query")
+
+workflow.add_edge("sanitize_query", "search_web")
+workflow.add_edge("search_web", "summarize_web")
+workflow.add_edge("summarize_web", "refine_answer")
+workflow.add_edge("refine_answer", END)
+
 app = workflow.compile()
 
-st.set_page_config(page_title="Web Chatbot", page_icon="🔍")
-st.markdown("<style>body{background-color:white;color:black;}</style>", unsafe_allow_html=True)
+st.set_page_config(page_title="Web Chatbot", page_icon="🔍", layout="centered", initial_sidebar_state="auto")
+st.markdown("""
+    <style>
+        html, body, [class*="css"]  {
+            background-color: white !important;
+            color: black !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
 st.title("🔎 Chatbot with Web Search")
 
-user_query = st.text_input("Ask me anything:")
+# Sidebar tools used
+with st.sidebar:
+    st.header("🛠 Tools Used")
+    st.markdown("""
+    - **LangGraph**: State machine for workflow
+    - **SERPAPI**: Google search results
+    - **Gemini API**: Summarization
+    - **Streamlit**: UI framework
+    - **SQLite**: Chat history storage
+    """)
 
-if st.button("Search") and user_query:
-    st.write("🔎 Searching web with SERP_API...")
-    snippets = perform_serpapi_search(user_query)
+# Display chat history
+st.subheader("💬 Chat History")
+c.execute("SELECT query, answer FROM chat ORDER BY id DESC")
+rows = c.fetchall()
+for query, answer in rows:
+    with st.chat_message("user"):
+        st.markdown(query)
+    with st.chat_message("assistant"):
+        st.markdown(answer)
+
+# Chat input
+if prompt := st.chat_input("Ask me anything..."):
+    st.chat_message("user").markdown(prompt)
 
     state = {
-        "query": user_query,
-        "web_content": snippets,
+        "query": prompt,
+        "web_content": "",
         "final_answer": "",
-        "steps": ["Step 1: Web search via DuckDuckGo completed"],
+        "steps": [],
     }
 
     result = app.invoke(state)
     result["steps"].append("Step 2: Gemini summary completed")
 
-# if st.button("Search") and user_query:
-#     st.write("🔎 Searching web...")
-#     search_results = web_run({
-#         "search_query": [{"q": user_query, "recency": 1, "domains": None}]
-#     })
-#     snippets = "\n\n".join(hit["snippet"] for hit in search_results["search_query_results"])
+    # Store in DB
+    c.execute("INSERT INTO chat (query, answer) VALUES (?, ?)", (prompt, result["final_answer"]))
+    conn.commit()
 
-#     state = {
-#         "query": user_query,
-#         "web_content": snippets,
-#         "final_answer": "",
-#         "steps": ["Step 1: Web search completed"],
-#     }
+    with st.chat_message("assistant"):
+        st.markdown(result["final_answer"])
 
-    result = app.invoke(state)
-    result["steps"].append("Step 2: Gemini summary completed")
+    with st.expander("📋 Process Steps"):
+        for s in result["steps"]:
+            st.write(s)
 
-    st.subheader("📋 Steps")
-    for s in result["steps"]:
-        st.write(s)
+    with st.expander("🌐 Snippets"):
+        st.code(result["web_content"], language="text")
 
-    st.subheader("📚 Answer")
-    st.write(result["final_answer"])
+    with st.expander("📊 LangGraph Flow"):
+        st.code("sanitize_query → search_web → summarize_web → refine_answer → insert_intodb → END", language="text")
 
-    st.subheader("🌐 Snippets")
-    st.code(result["web_content"], language="text")
