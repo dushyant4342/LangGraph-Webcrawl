@@ -1,35 +1,50 @@
-Frontend (Streamlit)
-User inputs query
+# Web Chatbot with LangGraph & Gemini
+A smart chatbot that fetches real-time web results using SERPAPI, summarizes them using Gemini, and tracks conversation history in SQLite — all orchestrated via LangGraph.
 
-Output shows live web result + summary + citations
+# How It Works
+User Query → taken via Streamlit chat UI
+
+LangGraph Workflow:
+
+sanitize_query
+
+search_web using SERPAPI
+
+summarize_web via Gemini API
+
+refine_answer
+
+insert_chat into SQLite DB
+
+Final response shown with steps + snippets + flow.
+
+🛠 Tools Used
+🧠 LangGraph: Clean modular flow with visual debugging
+
+🌐 SERPAPI: Real-time Google search results
+
+🔎 Gemini API: Summarizes fetched content
+
+💬 Streamlit: Interactive frontend
+
+🗃 SQLite: Stores past chats
+
+✅ Why This is Better
+Web-connected: Pulls live info, not static answers
+
+Stateful & Visual: LangGraph enables structured, explainable flows
+
+Persistent History: View/search old chats instantly
+
+Modular Design: Easy to add steps or improve logic
+
+🧪 Run It
+pip install -r requirements.txt
+streamlit run app.py
 
 
-LangGraph Workflow
-Start
-  ↓
-[Check Query Type] 
-  ↓
-[SERPAPI/Firecrawl Web Search]
-  ↓
-[Parse & Chunk Web Content]
-  ↓
-[Summarize via Gemini]
-  ↓
-[Return Answer]
-
-Components Needed
-Task	                        Tool / API
-Web search + crawl	         🔥 Firecrawl API
-LangGraph node logic	       ✅ Custom Python functions
-Summarization	              🧠 Gemini API (via LangChain Tool)
-LangGraph orchestration	    🧩 State + Edge-based routing
-Chat UI	                     🖥️ Streamlit
 
 
-📦 LangGraph Nodes
-Node Name	              Role
-check_query_type	    Route fact-based vs chit-chat (optional)
-search_web	Call      SERP_API/Firecrawl to fetch URLs + content
-process_chunks	      Clean, chunk content
-summarize_web	        Use Gemini to answer
-return_answer	        Send response to frontend
+
+
+
