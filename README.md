@@ -6,19 +6,20 @@ User Query → taken via Streamlit chat UI
 
 LangGraph Workflow:
 
-sanitize_query
+sanitize_query ->
 
-search_web using SERPAPI
+search_web using SERPAPI ->
 
-summarize_web via Gemini API
+summarize_web via Gemini API ->
 
-refine_answer
+refine_answer ->
 
-insert_chat into SQLite DB
+insert_chat into SQLite DB -> 
 
 Final response shown with steps + snippets + flow.
 
-🛠 Tools Used
+# Tools Used
+
 🧠 LangGraph: Clean modular flow with visual debugging
 
 🌐 SERPAPI: Real-time Google search results
@@ -29,7 +30,8 @@ Final response shown with steps + snippets + flow.
 
 🗃 SQLite: Stores past chats
 
-✅ Why This is Better
+# Why This is Better
+
 Web-connected: Pulls live info, not static answers
 
 Stateful & Visual: LangGraph enables structured, explainable flows
